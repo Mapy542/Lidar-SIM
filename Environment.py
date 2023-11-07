@@ -81,7 +81,6 @@ class Environment:
                     raypos.y + math.sin(angle) * accuracy * 10,
                 )
 
-                # print(raypos)
                 for rock in self.Rocks:
                     if rock.IsIn(raypos) and not inrock:
                         inrock = True

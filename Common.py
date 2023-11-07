@@ -79,7 +79,10 @@ class Bot:
         return f"Bot at {self.pos} with angle {self.angle}"
 
     def IsDead(self, angle):
-        for deadReange in self.DeadAngles:
-            if deadReange[0] <= angle + self.angle <= deadReange[1]:
+        for deadRange in self.DeadAngles:
+            if (
+                deadRange[0] <= (angle - self.angle) % (math.pi * 2)
+                and (angle - self.angle) % (math.pi * 2) <= deadRange[1]
+            ):
                 return True
         return False
