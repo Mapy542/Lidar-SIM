@@ -1,4 +1,4 @@
-import Common, Environment, guizero, threading, math, time
+import Common, Environment, guizero, threading, math, time, datetime
 
 
 class LidarSim:
@@ -18,6 +18,8 @@ class LidarSim:
 
         self.AbsoluteLidarData = []
         self.RobotLidarData = []
+
+        self.FrameTime = 0
 
         self.ViewThread = threading.Thread(target=self.OpenGui)
         self.ViewThread.start()
@@ -49,12 +51,13 @@ class LidarSim:
         if self.ShowGui:
             TotalWidth = self.env.SideSize * self.GuiScale
             self.app = guizero.App(
-                title="Lidar", width=TotalWidth + 100, height=TotalWidth + 100, layout="grid"
+                title="Lidar", width=TotalWidth + 200, height=TotalWidth + 100, layout="grid"
             )
             self.canvas = guizero.Drawing(
                 self.app, width=TotalWidth, height=TotalWidth, grid=[0, 0]
             )
             self.slider = guizero.Slider(self.app, start=1, end=10, horizontal=False, grid=[1, 0])
+            self.FrameTimeText = guizero.Text(self.app, text="0", grid=[1, 1])
 
             self.app.repeat(50, self.RedrawPoints)
             self.app.display()
@@ -111,6 +114,8 @@ class LidarSim:
         except Exception as e:
             print(e)
 
+        self.FrameTimeText.value = self.FrameTime
+
     def LidarThread(self, StartStopAngles, ThreadNumber, PointCount):
         while True:
             while len(self.LidarScanData[ThreadNumber][0]) != 0:
@@ -124,6 +129,7 @@ class LidarSim:
     def LidarCoordinatorThread(self):
         while True:
             wait = True
+            start = time.time()
             while wait:
                 done = True
                 for lidar in self.LidarScanData:
@@ -135,6 +141,7 @@ class LidarSim:
                     wait = False
 
                 time.sleep(0.001)
+            end = time.time()
             self.AbsoluteLidarData = []
             self.RobotLidarData = []
             for i in range(self.ScanThreads):
@@ -143,10 +150,11 @@ class LidarSim:
 
                 self.LidarScanData[i][0] = []
                 self.LidarScanData[i][1] = []
+            self.FrameTime = str(datetime.timedelta(seconds=end - start))
 
 
 inst = LidarSim(
-    ScanThreads=2,
+    ScanThreads=1,
     ShowGui=True,
     GuiScale=20,
     env=Environment.Environment(
