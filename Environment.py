@@ -94,6 +94,16 @@ class Environment:
                 if random.random() > 0.99999:  # add random noise
                     break
 
+            if not inrock:
+                if abs(raypos.x) > self.SideSize / 2:
+                    raypos = Common.Position(
+                        self.SideSize / 2 * math.copysign(1, raypos.x), raypos.y
+                    )
+                if abs(raypos.y) > self.SideSize / 2:
+                    raypos = Common.Position(
+                        raypos.x, self.SideSize / 2 * math.copysign(1, raypos.y)
+                    )
+
             points.append(
                 Common.Position(
                     raypos.x + random.random() * randomize,
@@ -101,45 +111,11 @@ class Environment:
                 )
             )
 
-        RobotDataPoints = [
-            Common.Position(
-                (point.x**2 + self.Robot.pos.x**2) ** 0.5,
-                (point.y**2 + self.Robot.pos.y**2) ** 0.5,
-            )
-            for point in points
-        ]  ## Convert to robot data points
+        RobotDataPoints = []
+        for point in points:
+            r, theta = Common.Position(
+                point.x - self.Robot.pos.x, point.y - self.Robot.pos.y
+            ).GetPolar()
+            RobotDataPoints.append(Common.Position(r, theta + self.Robot.angle, False))
 
         return points, RobotDataPoints
-
-
-def redraw(canvas):
-    global inst
-    points = inst.points
-    canvas.clear()
-    canvas.rectangle(0, 0, inst.SideSize, inst.SideSize, color="black")
-
-    canvas.oval(
-        inst.Robot.pos.x + inst.SideSize / 2 - 5,
-        inst.Robot.pos.y * -1 + inst.SideSize / 2 - 5,
-        inst.Robot.pos.x + inst.SideSize / 2 + 5,
-        inst.Robot.pos.y * -1 + inst.SideSize / 2 + 5,
-        color="green",
-    )
-
-    for point in points:
-        if point.y > 0:
-            canvas.oval(
-                point.x + inst.SideSize / 2 - 3,
-                point.y * -1 + inst.SideSize / 2 - 3,
-                point.x + inst.SideSize / 2 + 3,
-                point.y * -1 + inst.SideSize / 2 + 3,
-                color="red",
-            )
-        else:
-            canvas.oval(
-                point.x + inst.SideSize / 2 - 3,
-                point.y * -1 + inst.SideSize / 2 - 3,
-                point.x + inst.SideSize / 2 + 3,
-                point.y * -1 + inst.SideSize / 2 + 3,
-                color="blue",
-            )
