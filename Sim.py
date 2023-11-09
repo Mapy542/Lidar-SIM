@@ -1,4 +1,4 @@
-import Common, Environment, guizero, multiprocessing, math, time, datetime, threading
+import Common, Environment, DigitalProcessing, guizero, multiprocessing, math, time, datetime, threading
 
 
 class LidarSim:
@@ -10,6 +10,7 @@ class LidarSim:
         ShowDeadAngles=True,
         ScanThreads=1,
         PointCount=800,
+        Processor=DigitalProcessing.LidarDataProcessor(),
     ):
         self.env = env
         self.ShowGui = ShowGui
@@ -17,6 +18,8 @@ class LidarSim:
         self.ShowDeadAngles = ShowDeadAngles
         self.ScanThreads = ScanThreads
         self.PointCount = PointCount
+
+        self.Processor = Processor
 
         self.AbsoluteLidarData = []
         self.RobotLidarData = []
@@ -53,6 +56,22 @@ class LidarSim:
         self.LidarCoordinator = threading.Thread(target=self.LidarCoordinatorThread, daemon=True)
         self.LidarCoordinator.start()
 
+        self.ProcessorInfoQueue = multiprocessing.JoinableQueue()
+        self.ProcessorReturnQueue = multiprocessing.Queue()
+
+        self.ProcessorCoordinator = threading.Thread(
+            target=self.ProcessQueueCoordinator, daemon=True
+        )
+        self.ProcessorCoordinator.start()
+
+        self.ProcessorMultiProcess = multiprocessing.Process(
+            target=ProcessThread,
+            args=(self.Processor, self.ProcessorInfoQueue, self.ProcessorReturnQueue),
+            daemon=True,
+            name="ProcessorThread",
+        )
+        self.ProcessorMultiProcess.start()
+
     def OpenGui(self):
         if self.ShowGui:
             TotalWidth = self.env.SideSize * self.GuiScale
@@ -65,8 +84,12 @@ class LidarSim:
             self.slider = guizero.Slider(self.app, start=1, end=10, horizontal=False, grid=[1, 0])
             self.FrameTimeText = guizero.Text(self.app, text="0", grid=[1, 1])
 
-            self.ViewMode = guizero.CheckBox(self.app, text="Absolute", grid=[1, 2])
-            self.ViewMode.value = True
+            self.ViewMode = guizero.Combo(
+                self.app,
+                options=["Robot", "Absolute", "Processed"],
+                grid=[1, 2],
+                selected="Processed",
+            )
 
             self.app.repeat(10, self.RedrawPoints)
 
@@ -75,10 +98,12 @@ class LidarSim:
             self.app.display()
 
     def RedrawPoints(self):
-        if self.ViewMode.value:
+        if self.ViewMode.value == "Absolute":
             self.AbsolutePerspective()
-        else:
+        elif self.ViewMode.value == "Robot":
             self.RobotPerspective()
+        elif self.ViewMode.value == "Processed":
+            self.ProcessedPerspective()
 
     def AbsolutePerspective(self):
         def RobotPoint(offset=0):
@@ -251,6 +276,100 @@ class LidarSim:
 
         self.FrameTimeText.value = self.FrameTime
 
+    def ProcessedPerspective(self):
+        def RobotPoint(offset=0):
+            RobotPoint1 = Common.Position(
+                1.5, offset, False
+            )  # 1.5 is the radius of the robot corners, make top right corner offset
+            RobotPoint1 = Common.Position(
+                (RobotPoint1.x + self.env.SideSize / 2) * self.GuiScale,
+                (-1 * (RobotPoint1.y) + self.env.SideSize / 2) * self.GuiScale,
+            )  # convert to env coordinates
+            return RobotPoint1
+
+        self.canvas.clear()
+        self.canvas.rectangle(
+            0,
+            0,
+            self.env.SideSize * self.GuiScale,
+            self.env.SideSize * self.GuiScale,
+            color="black",
+        )
+
+        RobotPoint1 = RobotPoint(math.pi / 4)
+        RobotPoint2 = RobotPoint(3 * math.pi / 4)
+        RobotPoint3 = RobotPoint(5 * math.pi / 4)
+        RobotPoint4 = RobotPoint(7 * math.pi / 4)
+
+        self.canvas.line(RobotPoint1.x, RobotPoint1.y, RobotPoint2.x, RobotPoint2.y, color="red")
+        self.canvas.line(RobotPoint2.x, RobotPoint2.y, RobotPoint3.x, RobotPoint3.y, color="red")
+        self.canvas.line(RobotPoint3.x, RobotPoint3.y, RobotPoint4.x, RobotPoint4.y, color="red")
+        self.canvas.line(
+            RobotPoint4.x, RobotPoint4.y, RobotPoint1.x, RobotPoint1.y, color="blue"
+        )  # blue is the "up - front"
+
+        if self.ShowDeadAngles:
+            for angleRange in self.env.Robot.DeadAngles:
+                LowX, LowY = Common.Position(
+                    self.env.SideSize * 1.5,
+                    (angleRange[0]) % (math.pi * 2),
+                    False,
+                ).Get()
+                LowerBoundaryPoint = Common.Position(
+                    (LowX + self.env.SideSize / 2) * self.GuiScale,
+                    (-1 * LowY + self.env.SideSize / 2) * self.GuiScale,
+                )
+                HighX, HighY = Common.Position(
+                    self.env.SideSize * 1.5,
+                    (angleRange[1]) % (math.pi * 2),
+                    False,
+                ).Get()
+                HigherBoundaryPoint = Common.Position(
+                    (HighX + self.env.SideSize / 2) * self.GuiScale,
+                    (-1 * HighY + self.env.SideSize / 2) * self.GuiScale,
+                )
+
+                RobotPoint = Common.Position(
+                    (self.env.SideSize / 2) * self.GuiScale,
+                    (self.env.SideSize / 2) * self.GuiScale,
+                )
+
+                self.canvas.line(
+                    RobotPoint.x,
+                    RobotPoint.y,
+                    LowerBoundaryPoint.x,
+                    LowerBoundaryPoint.y,
+                    color="green",
+                )
+                self.canvas.line(
+                    RobotPoint.x,
+                    RobotPoint.y,
+                    HigherBoundaryPoint.x,
+                    HigherBoundaryPoint.y,
+                    color="green",
+                )
+
+        ScaleFactor = self.slider.value / 100
+        for point in self.Processor.AcceptableData:
+            self.canvas.oval(
+                (point.x + self.env.SideSize / 2 - ScaleFactor) * self.GuiScale,
+                (point.y * -1 + self.env.SideSize / 2 - ScaleFactor) * self.GuiScale,
+                (point.x + self.env.SideSize / 2 + ScaleFactor) * self.GuiScale,
+                (point.y * -1 + self.env.SideSize / 2 + ScaleFactor) * self.GuiScale,
+                color="green",
+            )
+
+        for point in self.Processor.IllegalData:
+            self.canvas.oval(
+                (point.x + self.env.SideSize / 2 - ScaleFactor) * self.GuiScale,
+                (point.y * -1 + self.env.SideSize / 2 - ScaleFactor) * self.GuiScale,
+                (point.x + self.env.SideSize / 2 + ScaleFactor) * self.GuiScale,
+                (point.y * -1 + self.env.SideSize / 2 + ScaleFactor) * self.GuiScale,
+                color="red",
+            )
+
+        self.FrameTimeText.value = self.FrameTime
+
     def TakeKeyStroke(self, event):
         code = event.keycode
         if code == 37:
@@ -283,6 +402,30 @@ class LidarSim:
                 self.RobotLidarData += RobotScanData
             self.FrameTime = str(datetime.timedelta(seconds=end - start))[5:]
 
+    def ProcessQueueCoordinator(self):
+        while True:
+            self.ProcessorInfoQueue.put(self.RobotLidarData)
+            self.ProcessorInfoQueue.join()
+
+            (
+                self.Processor.AcceptableData,
+                self.Processor.IllegalData,
+                self.Processor.POI,
+            ) = self.ProcessorReturnQueue.get()
+
+
+def ProcessThread(Processor, ProcessorInfoQueue, ProcessorReturnQueue):
+    while True:
+        if ProcessorInfoQueue.empty():
+            time.sleep(0.001)
+            continue
+        Processor.RobotLidarData = ProcessorInfoQueue.get()
+        Processor.AcceptableProcess()
+        ProcessorReturnQueue.put((Processor.AcceptableData, Processor.IllegalData, Processor.POI))
+
+        time.sleep(0.1)
+        ProcessorInfoQueue.task_done()
+
 
 def LidarThread(StartStopAngles, ThreadNumber, PointCount, SendQueue, ReturnQueue):
     while True:
@@ -295,23 +438,3 @@ def LidarThread(StartStopAngles, ThreadNumber, PointCount, SendQueue, ReturnQueu
         )
         ReturnQueue.put([ThreadNumber, AbsoluteScanData, RobotScanData])
         SendQueue.task_done()
-
-
-if __name__ == "__main__":
-    inst = LidarSim(
-        ScanThreads=8,
-        ShowGui=True,
-        GuiScale=20,
-        ShowDeadAngles=True,
-        env=Environment.Environment(
-            RobotPos=Common.Position(0, 0),
-            RobotAngle=0,
-            SideSize=30,
-            RockDiameter=1.5,
-            RockCount=15,
-            RobotDeadAngles=[
-                # [math.pi / 6, math.pi / 3],
-            ],
-        ),
-        PointCount=800,
-    )
