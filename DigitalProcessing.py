@@ -1,6 +1,10 @@
 class LidarDataProcessor:
     def __init__(self):
-        self.RobotLidarData = []
+        """This class is intended to process the data from the lidar and return a list of points that are acceptable for mapping and points of interest.
+        This is where noise removal and stuff like that will be done.
+        Any other functions the need to be run should be added to the ProcessThread function in Sim.py
+        """
+        self.RobotLidarData = []  # List of points from the lidar
 
         self.AcceptableData = (
             []
@@ -13,6 +17,9 @@ class LidarDataProcessor:
     def AcceptableProcess(self, NewData=[]):
         if NewData != []:
             self.RobotLidarData = NewData
+
+            # my first attempt to compare points to find the border of the map
+            # its real bad maybe the hough transform should be used to detect lines of the border and remove those points.
 
         self.IllegalData = []
         self.AcceptableData = []
@@ -30,3 +37,6 @@ class LidarDataProcessor:
                 self.AcceptableData.append(self.RobotLidarData[i])
             else:
                 self.IllegalData.append(self.RobotLidarData[i])
+
+    def FindPOI(self):
+        pass  # TODO: Find points of interest, such as rocks.

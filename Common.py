@@ -17,18 +17,46 @@ class Position:
             self.x, self.y = self.ToCartesian(a, b)
 
     def ToCartesian(self, r, theta):
+        """Returns a tuple of the cartesian coordinates of the polar coordinates.
+
+        Args:
+            r (float): Radius of the polar coordinates.
+            theta (float: radians): Angle of the polar coordinates.
+
+        Returns:
+            Tuple: (x,y) cartesian coordinates.
+        """
         return r * math.cos(theta), r * math.sin(theta)
 
     def ToPolar(self, x, y):
+        """Returns a tuple of the polar coordinates of the cartesian coordinates.
+
+        Args:
+            x (float): x coordinate of the cartesian coordinates.
+            y (float): y coordinate of the cartesian coordinates.
+
+        Returns:
+            Tuple: (r, theta) polar coordinates.
+        """
         return math.sqrt(x**2 + y**2), math.atan2(y, x)
 
     def __str__(self):
         return f"({self.x}, {self.y})"
 
     def Get(self):
+        """Returns the cartesian coordinates of the position.
+
+        Returns:
+            Tuple: (x,y) cartesian coordinates.
+        """
         return self.x, self.y
 
     def GetPolar(self):
+        """Returns the polar coordinates of the position.
+
+        Returns:
+            Tuple: (r, theta) polar coordinates.
+        """
         return self.ToPolar(self.x, self.y)
 
 
@@ -79,6 +107,14 @@ class Bot:
         return f"Bot at {self.pos} with angle {self.angle}"
 
     def IsDead(self, angle):
+        """Checks if an angle is in the dead angles of the robot.
+
+        Args:
+            angle (Radian): Angle to check.
+
+        Returns:
+            Bool: True if in dead angle, False if not.
+        """
         for deadRange in self.DeadAngles:
             if (
                 deadRange[0] <= (angle - self.angle) % (math.pi * 2)

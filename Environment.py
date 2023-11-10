@@ -14,7 +14,7 @@ class Environment:
     ):
         """The environment object that stores the size of the environment, the robot, and the rocks.
 
-        (ALL UNITS ARE IN FEET)
+        (ALL UNITS ARE IN FEET, yum)
         Args:
             SideSize (int, optional): Size of the environment. Defaults to 12.
             RobotPos (_type_, optional): Starting Location of the robot. Defaults to Common.Position(0, 0).
@@ -34,15 +34,26 @@ class Environment:
                 (RockDiameter if RockDiameter > 0 else random.random()),
             )
             for i in range(RockCount)
-        ]  # List of rocks
+        ]  # List of rocks at random locations made with list comprehension
 
     def __str__(self):
         return f"Environment with size {self.SideSize} and {len(self.Rocks)} rocks"
 
     def RandomSign(self):
+        """Returns a random sign, either 1 or -1.
+
+        Returns:
+            int: 1 or -1 randomly.
+        """
         return 1 if random.random() > 0.5 else -1
 
     def UpdateRobot(self, pos, angle):
+        """Update the robot's position and angle. Superfluous because felids are public but it's here.
+
+        Args:
+            pos (Position): New position of the robot.
+            angle (Radian): New angle of the robot.
+        """
         self.Robot.pos = pos
         self.Robot.angle = angle
 
@@ -52,7 +63,7 @@ class Environment:
         Args:
             PointCount (int, optional): How many points to scan. Defaults to 365.
             accuracy (float, optional): How small scan iterations are. Defaults to 0.001.
-            randomize (float, 0- inf): How much to randomize the scan. Defaults to 0.01.
+            randomize (float, positive float): How much to randomize the scan. Defaults to 0.01.
 
         Returns:
             list: List of the Points scanned, Position Objects.
@@ -60,62 +71,73 @@ class Environment:
 
         points = []
 
-        for i in range(PointCount):
-            if StartStopAngle == []:
-                angle = i / PointCount * 2 * math.pi
+        for i in range(PointCount):  # for each point
+            if StartStopAngle == []:  # if no start and stop angle
+                angle = i / PointCount * 2 * math.pi  # angle is proportion of 2pi times point count
             else:
-                angle = StartStopAngle[0] + i / PointCount * (StartStopAngle[1] - StartStopAngle[0])
+                angle = StartStopAngle[0] + i / PointCount * (
+                    StartStopAngle[1] - StartStopAngle[0]
+                )  # angle is proportion of start and stop angle times point count
 
-            if self.Robot.IsDead(angle):
+            if self.Robot.IsDead(angle):  # if angle is in dead angle, skip
                 continue
 
-            raypos = self.Robot.pos
-            inrock = False
+            RayPosition = (
+                self.Robot.pos
+            )  # start at robot position and project outwards (like a ray)
+            InRock = False  # loop breaking variable
             while (
-                abs(raypos.x) < self.SideSize / 2
-                and abs(raypos.y) < self.SideSize / 2
-                and not inrock
-            ):
-                raypos = Common.Position(
-                    raypos.x + math.cos(angle) * accuracy * 10,
-                    raypos.y + math.sin(angle) * accuracy * 10,
-                )
+                abs(RayPosition.x) < self.SideSize / 2
+                and abs(RayPosition.y) < self.SideSize / 2
+                and not InRock
+            ):  # while ray is in the environment and not in a rock
+                RayPosition = Common.Position(
+                    RayPosition.x + math.cos(angle) * accuracy * 10,
+                    RayPosition.y + math.sin(angle) * accuracy * 10,
+                )  # move ray forward at angle by accuracy * 10 amount
 
-                for rock in self.Rocks:
-                    if rock.IsIn(raypos) and not inrock:
-                        inrock = True
-                        while rock.IsIn(raypos):
-                            raypos = Common.Position(
-                                raypos.x - math.cos(angle) * accuracy,
-                                raypos.y - math.sin(angle) * accuracy,
-                            )
+                for rock in self.Rocks:  # for each rock
+                    if rock.IsIn(RayPosition):  # if ray is in rock
+                        InRock = True  # break loop on next iteration
+                        while rock.IsIn(RayPosition):  # while ray is in rock
+                            RayPosition = Common.Position(
+                                RayPosition.x - math.cos(angle) * accuracy,
+                                RayPosition.y - math.sin(angle) * accuracy,
+                            )  # move ray backwards by accuracy amount until it is just out of the rock
+                            # edge finding
                         break
 
                 if random.random() > 0.99999:  # add random noise
+                    # if this is triggered the point is added to the list at its current position
+                    # this simulates extreme random noise as points can appear anywhere on the ray length.
                     break
 
-            if not inrock:
-                if abs(raypos.x) > self.SideSize / 2:
-                    raypos = Common.Position(
-                        self.SideSize / 2 * math.copysign(1, raypos.x), raypos.y
-                    )
-                if abs(raypos.y) > self.SideSize / 2:
-                    raypos = Common.Position(
-                        raypos.x, self.SideSize / 2 * math.copysign(1, raypos.y)
-                    )
+            if not InRock:  # if ray is not in rock, it hit the border of the environment
+                # find if the ray hit the border on the x or y axis and move it to the border exactly
+                if abs(RayPosition.x) > self.SideSize / 2:
+                    RayPosition = Common.Position(
+                        self.SideSize / 2 * math.copysign(1, RayPosition.x), RayPosition.y
+                    )  # if the abs(x) is greater than the side size, move it to the side size (with sign)
+                if abs(RayPosition.y) > self.SideSize / 2:
+                    RayPosition = Common.Position(
+                        RayPosition.x, self.SideSize / 2 * math.copysign(1, RayPosition.y)
+                    )  # if the abs(y) is greater than the side size, move it to the side size (with sign)
 
             points.append(
                 Common.Position(
-                    raypos.x + random.random() * randomize,
-                    raypos.y + random.random() * randomize,
-                )
+                    RayPosition.x + random.random() * randomize,
+                    RayPosition.y + random.random() * randomize,
+                )  # add point to list with random noise added. This noise is controllable by the initialization variables.
             )
 
+        # these points are relative to the field, so they must be converted to the robot's position and angle
         RobotDataPoints = []
         for point in points:
             r, theta = Common.Position(
                 point.x - self.Robot.pos.x, point.y - self.Robot.pos.y
-            ).GetPolar()
-            RobotDataPoints.append(Common.Position(r, theta + self.Robot.angle, False))
+            ).GetPolar()  # take the difference between the point and the robot's position and convert to polar (translation transformation)
+            RobotDataPoints.append(
+                Common.Position(r, theta + self.Robot.angle, False)
+            )  # add the point to the list with the robot's angle added to the point's angle (rotation transformation)
 
         return points, RobotDataPoints
