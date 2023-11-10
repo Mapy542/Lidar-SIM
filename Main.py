@@ -3,7 +3,6 @@ import Environment, Sim, Common, math, random
 if __name__ == "__main__":  # initialize the object only once.
     Simulation = Sim.LidarSim(  # all units of measurement are in feet for perceptibility
         ScanThreads=6,
-        ShowGui=True,
         GuiScale=20,  # pixels per foot
         ShowDeadAngles=True,
         env=Environment.Environment(

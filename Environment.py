@@ -13,11 +13,9 @@ class Environment:
         RobotDeadAngles=[],
     ):
         """The environment object that stores the size of the environment, the robot, and the rocks.
-
-        (ALL UNITS ARE IN FEET, yum)
         Args:
             SideSize (int, optional): Size of the environment. Defaults to 12.
-            RobotPos (_type_, optional): Starting Location of the robot. Defaults to Common.Position(0, 0).
+            RobotPos (Common.Position, optional): Starting Location of the robot. Defaults to Common.Position(0, 0).
             RobotAngle (int, optional): Starting angle of the robot. Defaults to 0.
             RockCount (int, optional): number of rocks on the environment. Defaults to 5.
             RockDiameter (float, optional): Size of the rocks. Defaults to random(0-1).
