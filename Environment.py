@@ -80,8 +80,18 @@ class Environment:
             if self.Robot.IsDead(angle):  # if angle is in dead angle, skip
                 continue
 
-            RayPosition = (
-                self.Robot.pos
+            for rock in self.Rocks:  # for each rock
+                if rock.IsIn(self.Robot.pos):  # if ray is in rock
+                    points.append(
+                        Common.Position(
+                            self.Robot.pos.x + random.random() * randomize,
+                            self.Robot.pos.y + random.random() * randomize,
+                        )
+                    )  # add point to list with random noise added. This noise is controllable by the initialization variables.
+                    continue
+
+            RayPosition = Common.Position(
+                self.Robot.pos.x, self.Robot.pos.y
             )  # start at robot position and project outwards (like a ray)
             InRock = False  # loop breaking variable
             while (
@@ -89,19 +99,25 @@ class Environment:
                 and abs(RayPosition.y) < self.SideSize / 2
                 and not InRock
             ):  # while ray is in the environment and not in a rock
-                RayPosition = Common.Position(
+                """RayPosition = Common.Position(
                     RayPosition.x + math.cos(angle) * accuracy * 10,
                     RayPosition.y + math.sin(angle) * accuracy * 10,
-                )  # move ray forward at angle by accuracy * 10 amount
+                )  # move ray forward at angle by accuracy * 10 amount"""
+
+                RayPosition.x += math.cos(angle) * accuracy * 10
+                RayPosition.y += math.sin(angle) * accuracy * 10
 
                 for rock in self.Rocks:  # for each rock
                     if rock.IsIn(RayPosition):  # if ray is in rock
                         InRock = True  # break loop on next iteration
                         while rock.IsIn(RayPosition):  # while ray is in rock
-                            RayPosition = Common.Position(
+                            """RayPosition = Common.Position(
                                 RayPosition.x - math.cos(angle) * accuracy,
                                 RayPosition.y - math.sin(angle) * accuracy,
                             )  # move ray backwards by accuracy amount until it is just out of the rock
+                            """
+                            RayPosition.x -= math.cos(angle) * accuracy
+                            RayPosition.y -= math.sin(angle) * accuracy
                             # edge finding
                         break
 
