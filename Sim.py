@@ -441,6 +441,7 @@ class LidarSim:
             self.FrameTime = str(datetime.timedelta(seconds=end - start))[
                 5:
             ]  # calculate the time it took to run the lidar
+            # time.sleep(5)
 
     def ProcessQueueCoordinator(self):
         # this thread is responsible for sending the lidar data to the processing thread and collecting the data
