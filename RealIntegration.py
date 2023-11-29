@@ -1,5 +1,5 @@
 import Common, DigitalProcessing, math, guizero
-import serial, serial.tools.list_ports, threading
+import serial, serial.tools.list_ports, threading, multiprocessing, time
 
 
 class RealLidar:
@@ -27,7 +27,11 @@ class RealLidar:
         self.SideSize = SideSize
 
         if SerialCom == None:
-            SerialCom = serial.tools.list_ports.comports()[0].device
+            try:
+                SerialCom = serial.tools.list_ports.comports()[0].device
+            except IndexError:
+                print("No serial ports found.")
+                exit()
 
         try:
             self.Serial = serial.Serial(port=SerialCom, baudrate=BaudRate, timeout=1)
@@ -35,6 +39,8 @@ class RealLidar:
             print("Could not connect to serial port.")
             return
 
+        self.ProcessorInfoQueue = multiprocessing.JoinableQueue()
+        self.ProcessorReturnQueue = multiprocessing.Queue()
         self.Processor = Processor
 
         self.RobotLidarData = []  # List of points from the lidar
@@ -44,6 +50,19 @@ class RealLidar:
 
         self.ViewThread = threading.Thread(target=self.OpenGui)
         self.ViewThread.start()
+
+        self.ProcessorCoordinator = threading.Thread(
+            target=self.ProcessQueueCoordinator, daemon=True
+        )
+        self.ProcessorCoordinator.start()
+
+        self.ProcessorMultiProcess = multiprocessing.Process(
+            target=ProcessThread,
+            args=(self.Processor, self.ProcessorInfoQueue, self.ProcessorReturnQueue),
+            daemon=True,
+            name="ProcessorThread",
+        )
+        self.ProcessorMultiProcess.start()
 
     def ReadData(self):
         points = []
@@ -221,3 +240,37 @@ class RealLidar:
                 (point.y * -1 + self.SideSize / 2 + ScaleFactor) * self.GuiScale,
                 color="red",
             )
+
+    def ProcessQueueCoordinator(self):
+        # this thread is responsible for sending the lidar data to the processing thread and collecting the data
+        # this class can only communicate to the multiprocessing threads through queues
+        while True:
+            self.ProcessorInfoQueue.put(
+                self.RobotLidarData
+            )  # send the lidar data to the processing thread
+            self.ProcessorInfoQueue.join()  # wait for the processing thread to finish
+
+            (
+                self.Processor.AcceptableData,
+                self.Processor.IllegalData,
+                self.Processor.POI,
+            ) = (
+                self.ProcessorReturnQueue.get()
+            )  # get the data from the processing thread for the gui
+
+
+def ProcessThread(Processor, ProcessorInfoQueue, ProcessorReturnQueue):
+    # this is the processing thread
+    # it takes the lidar data and processes it
+    # is is a separate process from the main process so it is encapsulated with limited access to the environment (no cheating)
+    # it has the full performance of a python interpreter so it can be used to do more complex processing
+    while True:
+        if ProcessorInfoQueue.empty():
+            time.sleep(0.001)
+            continue
+        Processor.RobotLidarData = ProcessorInfoQueue.get()
+        # add any more functions that need to be run here
+        Processor.AcceptableProcess()
+        ProcessorReturnQueue.put((Processor.AcceptableData, Processor.IllegalData, Processor.POI))
+
+        ProcessorInfoQueue.task_done()  # tell the coordinator thread that it is done
