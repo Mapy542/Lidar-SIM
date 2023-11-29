@@ -124,7 +124,8 @@ class Environment:
                 if random.random() > 0.99999:  # add random noise
                     # if this is triggered the point is added to the list at its current position
                     # this simulates extreme random noise as points can appear anywhere on the ray length.
-                    break
+                    # break
+                    pass
 
             if not InRock:  # if ray is not in rock, it hit the border of the environment
                 # find if the ray hit the border on the x or y axis and move it to the border exactly
