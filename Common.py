@@ -59,6 +59,14 @@ class Position:
         """
         return self.ToPolar(self.x, self.y)
 
+    def GetROnly(self):
+        """Returns the radius of the position.
+
+        Returns:
+            float: r radius.
+        """
+        return math.sqrt(self.x**2 + self.y**2)
+
 
 class Rock:
     def __init__(self, pos=Position(0, 0), diameter=0.5):
