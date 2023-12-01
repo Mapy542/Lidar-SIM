@@ -33,20 +33,23 @@ class RealLidar:
                 print("No serial ports found.")
                 exit()
 
-        try:
-            self.Serial = serial.Serial(port=SerialCom, baudrate=BaudRate, timeout=1)
-        except:
-            print("Could not connect to serial port.")
-            return
-
         self.ProcessorInfoQueue = multiprocessing.JoinableQueue()
         self.ProcessorReturnQueue = multiprocessing.Queue()
         self.Processor = Processor
 
         self.RobotLidarData = []  # List of points from the lidar
 
-        self.ScanThread = threading.Thread(target=self.ReadData, daemon=True)
+        self.ReadReturnQueue = multiprocessing.Queue()
+        self.ScanThread = threading.Thread(target=self.ReadDataCoordinator, daemon=True)
         self.ScanThread.start()
+
+        self.ScanCoordinator = multiprocessing.Process(
+            target=ReadDataProcess,
+            args=(SerialCom, BaudRate, self.ReadReturnQueue),
+            daemon=True,
+            name="ScanThread",
+        )
+        self.ScanCoordinator.start()
 
         self.ViewThread = threading.Thread(target=self.OpenGui)
         self.ViewThread.start()
@@ -63,53 +66,6 @@ class RealLidar:
             name="ProcessorThread",
         )
         self.ProcessorMultiProcess.start()
-
-    def ReadData(self):
-        points = []
-        while True:
-            if not self.Serial.is_open:  # if the serial port is closed, exit the thread
-                return
-
-            buffer = self.Serial.read_until(b"\xfa")  # read until the start byte is found
-
-            if buffer == b"":
-                print("No data")
-                continue
-
-            buffer = buffer[:-1]  # remove the start byte
-            buffer = [i for i in buffer]
-
-            if len(buffer) < 9:
-                print("Buffer too short.")
-                continue
-
-            index = buffer[0] - 0xA0
-            print("Index: " + str(index))
-
-            for j in range(0, 4):
-                # QuadrantOffset = math.floor(len(points) / 90) * 90
-                # print("Quadrant offset: " + str(QuadrantOffset))
-                angle = ((index * 4 + j) * math.pi / 180) % (2 * math.pi)
-                lowDist = buffer[1 + 2 * j]
-                highDist = buffer[2 + 2 * j]
-
-                if highDist & 0xE0:
-                    points.append(Common.Position(angle, 0, False))
-                    print("Error at angle " + str(angle) + ".")
-                    continue
-
-                dist = highDist & 0x1F
-                dist <<= 8
-                dist |= lowDist
-                dist /= 20
-                print("Angle: " + str(angle * 180 / math.pi) + ", Distance: " + str(dist))
-
-                if angle == 0:
-                    self.RobotLidarData = points.copy()
-                    points = []
-                    print("Points sent to queue.")
-
-                points.append(Common.Position(dist, angle, False))
 
     def OpenGui(self):
         # Initialize the gui and all the gui elements
@@ -240,6 +196,10 @@ class RealLidar:
                 (point.y * -1 + self.SideSize / 2 + ScaleFactor) * self.GuiScale,
                 color="red",
             )
+            # self.canvas.line(
+
+        for Interest in self.Processor.POI:
+            Interest.Canvas(self.canvas, self.SideSize, self.GuiScale)
 
     def ProcessQueueCoordinator(self):
         # this thread is responsible for sending the lidar data to the processing thread and collecting the data
@@ -258,6 +218,18 @@ class RealLidar:
                 self.ProcessorReturnQueue.get()
             )  # get the data from the processing thread for the gui
 
+    def ReadDataCoordinator(self):
+        # this thread is responsible for reading the data from the serial port and sending it to the processing thread
+        # this class can only communicate to the multiprocessing threads through queues
+        while True:
+            if self.ReadReturnQueue.empty():
+                time.sleep(0.01)
+                continue
+
+            self.RobotLidarData = []
+            self.RobotLidarData = self.ReadReturnQueue.get()
+            # print(len(self.RobotLidarData))
+
 
 def ProcessThread(Processor, ProcessorInfoQueue, ProcessorReturnQueue):
     # this is the processing thread
@@ -274,3 +246,63 @@ def ProcessThread(Processor, ProcessorInfoQueue, ProcessorReturnQueue):
         ProcessorReturnQueue.put((Processor.AcceptableData, Processor.IllegalData, Processor.POI))
 
         ProcessorInfoQueue.task_done()  # tell the coordinator thread that it is done
+
+
+def ReadDataProcess(SerialCom, BaudRate, ReturnQueue):
+    try:
+        Serial = serial.Serial(port=SerialCom, baudrate=BaudRate, timeout=1)
+    except:
+        print("Could not connect to serial port.")
+        exit()
+
+    points = []
+    while True:
+        if not Serial.is_open:  # if the serial port is closed, exit the thread
+            return
+
+        buffer = Serial.read_until(b"\xfa")  # read until the start byte is found
+
+        if buffer == b"":
+            print("No data")
+            continue
+
+        buffer = buffer[:-1]  # remove the start byte
+        buffer = [i for i in buffer]
+
+        if len(buffer) < 9:
+            # print("Buffer too short.")
+            continue
+
+        index = buffer[0] - 0xA0
+        # print("Index: " + str(index))
+
+        for j in range(0, 4):
+            # QuadrantOffset = math.floor(len(points) / 90) * 90
+            # print("Quadrant offset: " + str(QuadrantOffset))
+            angle = ((index * 4 + j) * math.pi / 180) % (2 * math.pi)
+            lowDist = buffer[1 + 2 * j]
+            highDist = buffer[2 + 2 * j]
+
+            if highDist & 0xE0 > 0:
+                #   points.append(Common.Position(angle, 0, False))
+                # print("Error at angle " + str(angle) + ".")
+                error = True
+                # continue
+            else:
+                error = False
+
+            dist = highDist & 0x1F
+            dist <<= 8
+            dist |= lowDist
+            dist /= 20
+            # print("Angle: " + str(angle * 180 / math.pi) + ", Distance: " + str(dist))
+
+            if index * 4 + j == 0 or len(points) >= 360:
+                ReturnQueue.put(points.copy())
+                points = []
+                # if len(points) >= 360:
+                # print(index * 4 + j)
+                # print("Points sent to queue.")
+
+            if not error:
+                points.append(Common.Position(dist / 2, angle, False))
