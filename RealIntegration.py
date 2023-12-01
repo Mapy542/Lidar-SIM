@@ -26,6 +26,9 @@ class RealLidar:
         self.GuiScale = GuiScale
         self.SideSize = SideSize
 
+        self.InitGuiScale = GuiScale
+        self.InitSideSize = SideSize
+
         if SerialCom == None:
             try:
                 SerialCom = serial.tools.list_ports.comports()[0].device
@@ -79,6 +82,13 @@ class RealLidar:
                 self.app, width=TotalWidth, height=TotalWidth, grid=[0, 0, 1, 5]
             )
             self.slider = guizero.Slider(self.app, start=1, end=10, horizontal=False, grid=[1, 0])
+            self.GuiScaleSlider = guizero.Slider(
+                self.app,
+                start=1,
+                end=100,
+                horizontal=False,
+                grid=[1, 1],
+            )
 
             self.ViewMode = guizero.Combo(
                 self.app,
@@ -94,6 +104,8 @@ class RealLidar:
     def RedrawPoints(self):
         # redraws the points on the gui
         # calls different functions based on the view mode
+        self.GuiScale = self.InitGuiScale * self.GuiScaleSlider.value / 100
+        self.SideSize = self.InitSideSize * 1 / (self.GuiScaleSlider.value / 100)
         if self.ViewMode.value == "Robot":
             self.RobotPerspective()
         elif self.ViewMode.value == "Processed":

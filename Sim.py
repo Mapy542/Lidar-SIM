@@ -26,6 +26,8 @@ class LidarSim:
         self.env = env
         self.ShowGui = ShowGui
         self.GuiScale = GuiScale
+        self.InitGuiScale = GuiScale
+        self.InitSideSize = self.env.SideSize
         self.ShowDeadAngles = ShowDeadAngles
         self.ScanThreads = ScanThreads
         self.PointCount = PointCount
@@ -99,6 +101,9 @@ class LidarSim:
                 self.app, width=TotalWidth, height=TotalWidth, grid=[0, 0, 1, 5]
             )
             self.slider = guizero.Slider(self.app, start=1, end=10, horizontal=False, grid=[1, 0])
+            self.GuiScaleSlider = guizero.Slider(
+                self.app, start=1, end=100, horizontal=False, grid=[1, 3]
+            )
             self.FrameTimeText = guizero.Text(self.app, text="0", grid=[1, 1])
 
             self.ViewMode = guizero.Combo(
@@ -117,6 +122,9 @@ class LidarSim:
     def RedrawPoints(self):
         # redraws the points on the gui
         # calls different functions based on the view mode
+        self.GuiScale = self.GuiScaleSlider.value / 100 * self.InitGuiScale
+        self.env.SideSize = self.InitSideSize * 1 / (self.GuiScaleSlider.value / 100)
+
         if self.ViewMode.value == "Absolute":
             self.AbsolutePerspective()
         elif self.ViewMode.value == "Robot":
