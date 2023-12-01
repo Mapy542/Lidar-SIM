@@ -31,25 +31,27 @@ class LidarDataProcessor:
         # README for Wall Detection removal algorithm:
 
         ClusteredPoints = self.DetectClusters(
-            self.RobotLidarData, 0.6
+            self.RobotLidarData, 0.7
         )  # Takes all the points and clusters them based on jumps in distance between points
 
-        """ClusteredPoints = [
+        ClusteredPoints = [
             cluster for cluster in ClusteredPoints if len(cluster) > 5
         ]  # remove clusters with less than 5 points
 
-        if len(ClusteredPoints) < 4:
+        if len(ClusteredPoints) < 2:
             time.sleep(0.1)
-            return"""
+            return
 
-        for i in range(len(ClusteredPoints)):
+        """for i in range(len(ClusteredPoints)):
             if i % 2 == 0:
                 self.IllegalData.extend(ClusteredPoints[i])
             else:
-                self.AcceptableData.extend(ClusteredPoints[i])
-        """
+                self.AcceptableData.extend(ClusteredPoints[i])"""
+
         ClusterLinearRegressions = []
-        for cluster in ClusteredPoints:
+        self.POI = []
+        colors = ["red", "blue", "green", "yellow", "purple", "orange"]
+        for index, cluster in enumerate(ClusteredPoints):
             XLinearRegression = self.LinearRegression(cluster)
             SwappedCluster = self.SwapXY(cluster)
             YLinearRegression = self.LinearRegression(SwappedCluster)
@@ -61,17 +63,34 @@ class LidarDataProcessor:
 
             if XGoodnessOfFit > YGoodnessOfFit:
                 ClusterLinearRegressions.append(XGoodnessOfFit)
+                self.POI.append(
+                    Common.Line(
+                        Common.Position(-300, XLinearRegression[0] * -300 + XLinearRegression[1]),
+                        Common.Position(300, XLinearRegression[0] * 300 + XLinearRegression[1]),
+                        colors[index % len(colors)],
+                    )
+                )
+                for point in cluster:
+                    self.POI.append(Common.POIPoint(point, colors[index % len(colors)]))
             else:
                 ClusterLinearRegressions.append(YGoodnessOfFit)
+                self.POI.append(
+                    Common.Line(
+                        Common.Position(-300, YLinearRegression[0] * -300 + YLinearRegression[1]),
+                        Common.Position(300, YLinearRegression[0] * 300 + YLinearRegression[1]),
+                        colors[index % len(colors)],
+                    )
+                )
+                for point in cluster:
+                    self.POI.append(Common.POIPoint(point, colors[index % len(colors)]))
 
-        ClusterLinearRegressionMean = self.Mean(ClusterLinearRegressions)
-
-        for i in range(len(ClusteredPoints)):
-            if ClusterLinearRegressions[i] > ClusterLinearRegressionMean:  # likely a line
+        # ClusterLinearRegressionMean = self.Mean(ClusterLinearRegressions)
+        print("len: " + str(len(ClusteredPoints)))
+        """for i in range(len(ClusteredPoints)):
+            if ClusterLinearRegressions[i] > 0.75:  # likely a line
                 self.IllegalData.extend(ClusteredPoints[i])
             else:
-                self.AcceptableData.extend(ClusteredPoints[i])  # likely not a line
-        """
+                self.AcceptableData.extend(ClusteredPoints[i])  # likely not a line"""
 
     def DetectClusters(self, Points, WindowScale=0.1):
         """Takes a list of points and returns a list of lists of points that are clustered together.
@@ -138,11 +157,16 @@ class LidarDataProcessor:
         Clusters = []
         for i in range(len(ClusterEndPoints) - 1):
             Clusters.append(
-                Points[ClusterEndPoints[i] : ClusterEndPoints[i + 1]]
+                Points[ClusterEndPoints[i] + 1 : ClusterEndPoints[i + 1]]
             )  # Get the clusters
 
-        if ClusterEndPoints[0] > 2:
-            Clusters.insert(0, Points[: ClusterEndPoints[0]])  # Get the first cluster if it exists
+        try:
+            if ClusterEndPoints[0] > 2:
+                Clusters.insert(
+                    0, Points[: ClusterEndPoints[0]]
+                )  # Get the first cluster if it exists
+        except IndexError:
+            pass
 
         return Clusters
 
