@@ -402,6 +402,9 @@ class LidarSim:
 
         self.FrameTimeText.value = self.FrameTime
 
+        for Interest in self.Processor.POI:
+            Interest.Canvas(self.canvas, self.env.SideSize, self.GuiScale)
+
     def TakeKeyStroke(self, event):
         # takes a key stroke and moves the robot
         # used to move the robot around the area
