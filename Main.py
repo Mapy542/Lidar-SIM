@@ -1,7 +1,7 @@
 import Environment, Sim, Common, RealIntegration
 
 if __name__ == "__main__":  # initialize the object only once.
-    Simulation = Sim.LidarSim(  # all units of measurement are in feet for perceptibility
+    """Simulation = Sim.LidarSim(  # all units of measurement are in feet for perceptibility
         ScanThreads=4,
         GuiScale=20,  # pixels per foot
         ShowDeadAngles=True,
@@ -18,8 +18,8 @@ if __name__ == "__main__":  # initialize the object only once.
             ],
         ),
         PointCount=800,
-    )
-    # Instance = RealIntegration.RealLidar(SideSize=300, GuiScale=2)
+    )"""
+    Instance = RealIntegration.RealLidar(SideSize=300, GuiScale=2)
 # Simulation initializes all the threads and then ends. this must be modified to run without GUI.
 # the gui thread is the only thread that is non-daemon, so the program will end when the gui is closed.
 

@@ -295,15 +295,18 @@ def ReadDataProcess(SerialCom, BaudRate, ReturnQueue):
             lowDist = buffer[1 + 2 * j]
             highDist = buffer[2 + 2 * j]
 
-            if highDist & 0xE0 > 0:
+            if highDist & 0b_1000_0000 > 0:
                 #   points.append(Common.Position(angle, 0, False))
-                # print("Error at angle " + str(angle) + ".")
+                print("Invalid data at angle " + str(angle) + ".")
                 error = True
                 # continue
+            elif highDist & 0b_0100_0000 > 0:
+                print("Strength warning at angle" + str(angle))
+                error = True
             else:
                 error = False
 
-            dist = highDist & 0x1F
+            dist = highDist & 0b_0011_1111
             dist <<= 8
             dist |= lowDist
             dist /= 20
