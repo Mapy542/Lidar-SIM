@@ -68,6 +68,19 @@ class Position:
         """
         return math.sqrt(self.x**2 + self.y**2)
 
+    def __eq__(self, __value: object) -> bool:
+        """Checks if two positions are equal.
+
+        Args:
+            __value (object): Position to compare to.
+
+        Returns:
+            bool: True if equal, False if not.
+        """
+        if isinstance(__value, Position):
+            return self.x == __value.x and self.y == __value.y
+        return False
+
 
 class POIPoint:
     def __init__(self, Point=Position(), color="red"):
@@ -194,3 +207,16 @@ class Bot:
             ):
                 return True
         return False
+
+
+class Polygon:
+    def __init__(self, points=[]):
+        """Polygon class for drawing polygons. Applicable as a POI.
+
+        Args:
+            points (list of Positions, optional): Points of the polygon. Defaults to [].
+        """
+        self.points = points
+
+    def __str__(self):
+        return f"Polygon with points {self.points}"

@@ -1,4 +1,4 @@
-import math, Common, time
+import math, Common, time, copy
 
 
 class LidarDataProcessor:
@@ -27,10 +27,11 @@ class LidarDataProcessor:
 
         self.IllegalData = []
         self.AcceptableData = []
+        self.POI = []
 
         # README for Wall Detection removal algorithm:
 
-        ClusteredPoints = self.DetectClusters(
+        """ClusteredPoints = self.DetectClusters(
             self.RobotLidarData, 0.7
         )  # Takes all the points and clusters them based on jumps in distance between points
 
@@ -42,11 +43,11 @@ class LidarDataProcessor:
             time.sleep(0.1)
             return
 
-        """for i in range(len(ClusteredPoints)):
+        \"\"\"for i in range(len(ClusteredPoints)):
             if i % 2 == 0:
                 self.IllegalData.extend(ClusteredPoints[i])
             else:
-                self.AcceptableData.extend(ClusteredPoints[i])"""
+                self.AcceptableData.extend(ClusteredPoints[i])\"\"\"
 
         ClusterLinearRegressions = []
         self.POI = []
@@ -86,11 +87,54 @@ class LidarDataProcessor:
 
         # ClusterLinearRegressionMean = self.Mean(ClusterLinearRegressions)
         print("len: " + str(len(ClusteredPoints)))
-        """for i in range(len(ClusteredPoints)):
+        \"\"\"for i in range(len(ClusteredPoints)):
             if ClusterLinearRegressions[i] > 0.75:  # likely a line
                 self.IllegalData.extend(ClusteredPoints[i])
             else:
-                self.AcceptableData.extend(ClusteredPoints[i])  # likely not a line"""
+                self.AcceptableData.extend(ClusteredPoints[i])  # likely not a line\"\"\"
+        """
+        HullPoints = self.ConvexHullPoints(self.RobotLidarData)
+
+        m = (HullPoints[0][1].y - HullPoints[0][0].y) / (HullPoints[0][1].x - HullPoints[0][0].x)
+        b = HullPoints[0][0].y - m * HullPoints[0][0].x
+
+        Deviations = [
+            self.DeviationFromLine(
+                self.RobotLidarData,
+                (line[1].y - line[0].y) / (line[1].x - line[0].x),
+                line[0].y - (line[1].y - line[0].y) / (line[1].x - line[0].x) * line[0].x,
+            )
+            for line in HullPoints
+        ]
+
+        CopyRobotLidarData = copy.copy(self.RobotLidarData)
+        j = 0
+        while j < len(Deviations):
+            deviation = Deviations[j]
+            i = 0
+            while i < len(CopyRobotLidarData):
+                # print(deviation[i])
+                if deviation[i] < 0.15:
+                    CopyRobotLidarData.pop(i)
+                    for k in range(len(Deviations)):
+                        Deviations[k].pop(i)
+                else:
+                    i += 1
+            j += 1
+
+        self.AcceptableData = CopyRobotLidarData
+        self.IllegalData = [x for x in self.RobotLidarData if not x in self.AcceptableData]
+
+        # self.IllegalData = SumHallPoints
+        colors = ["red", "orange", "yellow", "green", "blue", "purple"]
+
+        for index, line in enumerate(HullPoints):
+            AdjustedLine = copy.copy(line)
+            AdjustedLine[0].y *= -1
+            self.POI.append(Common.Line(line[0], line[1], "blue"))
+
+    # InverseHullPoints = [x for x in self.RobotLidarData if not x in SumHallPoints]
+    # self.AcceptableData = InverseHullPoints
 
     def DetectClusters(self, Points, WindowScale=0.1):
         """Takes a list of points and returns a list of lists of points that are clustered together.
@@ -292,3 +336,171 @@ class LidarDataProcessor:
 
     def FindPOI(self):
         pass  # TODO: Find points of interest, such as rocks.
+
+    def ConvexHullPoints(self, Points=[]):
+        """Returns the points that make up the convex hull of a set of points.
+
+        Args:
+            Points (list, optional): List of Common.Positions. Defaults to [].
+
+        Returns:
+            list: List of Common.Positions that make up the convex hull.
+        """
+
+        def FurthestPointCalc(Points, LinePointOne, LinePointTwo):
+            FurthestPoint = copy.copy(Points[0])
+            m = (LinePointTwo.y - LinePointOne.y) / (LinePointTwo.x - LinePointOne.x)
+            b = LinePointOne.y - m * LinePointOne.x
+            FurthestPointDeviation = self.DeviationFromLine([FurthestPoint], m, b)[0]
+            for point in Points:
+                Deviation = self.DeviationFromLine([point], m, b)[0]
+                if Deviation > FurthestPointDeviation:
+                    FurthestPoint = copy.copy(point)
+                    FurthestPointDeviation = Deviation
+            return FurthestPoint
+
+        def ExtrapolateHull(Points, LinePointOne, LinePointTwo):
+            # print(len(Points))
+            if len(Points) == 0:  # no points left to extrapolate, return hull polygon section
+                return [[LinePointOne, LinePointTwo]]
+            FurthestPoint = FurthestPointCalc(Points, LinePointOne, LinePointTwo)
+            # print(FurthestPoint)
+            NewPoints = []
+            for point in Points:
+                if (
+                    not point == FurthestPoint
+                    and not point == LinePointOne
+                    and not point == LinePointTwo
+                ):
+                    if LinePointOne.y == LinePointTwo.y:
+                        # horizontal bottom, don't include bottom points in raycast
+                        if not self.RayCastIntersectContains(
+                            [[LinePointOne, FurthestPoint], [FurthestPoint, LinePointTwo]], point
+                        ):
+                            NewPoints.append(copy.copy(point))
+                    else:
+                        # slanted bottom, include bottom points in raycast
+                        if not self.RayCastIntersectContains(
+                            [
+                                [LinePointOne, FurthestPoint],
+                                [FurthestPoint, LinePointTwo],
+                                [LinePointTwo, LinePointOne],
+                            ],
+                            point,
+                        ):
+                            NewPoints.append(copy.copy(point))
+
+            m = (FurthestPoint.y - LinePointOne.y) / (FurthestPoint.x - LinePointOne.x)
+            b = LinePointOne.y - m * LinePointOne.x
+
+            FilteredNewPoints = [
+                point
+                for point in NewPoints
+                if point.x < FurthestPoint.x and point.y > m * point.x + b
+            ]
+            InverseFilteredNewPoints = [
+                point
+                for point in NewPoints
+                if point.x > FurthestPoint.x and point.y < m * point.x + b
+            ]
+
+            x = ExtrapolateHull(FilteredNewPoints, LinePointOne, FurthestPoint)
+            # print("x " + str(x))
+            y = ExtrapolateHull(InverseFilteredNewPoints, FurthestPoint, LinePointTwo)
+            # print("y " + str(y))
+            # print("furthest pint: " + str(FurthestPoint) + " x: " + str(x) + " y: " + str(y))
+
+            x.extend(y)  # combine the two lists of polygon sections
+            return x
+
+        LeftMostPoint = copy.copy(Points[0])
+        for point in Points:
+            if point.x < LeftMostPoint.x:
+                LeftMostPoint = copy.copy(point)
+            elif point.x == LeftMostPoint.x and point.y < LeftMostPoint.y:
+                LeftMostPoint = copy.copy(point)
+
+        RightMostPoint = copy.copy(Points[0])
+        for point in Points:
+            if point.x > RightMostPoint.x:
+                RightMostPoint = copy.copy(point)
+            elif point.x == RightMostPoint.x and point.y > RightMostPoint.y:
+                RightMostPoint = copy.copy(point)
+
+        # print(LeftMostPoint)
+        # print(RightMostPoint)
+
+        # Upper
+        m = (RightMostPoint.y - LeftMostPoint.y) / (RightMostPoint.x - LeftMostPoint.x)
+        b = LeftMostPoint.y - m * LeftMostPoint.x
+        UpperPoints = [copy.copy(point) for point in Points if point.y > m * point.x + b]
+        LowerPoints = [copy.copy(point) for point in Points if point.y < m * point.x + b]
+
+        # print(UpperPoints)
+        # print(LowerPoints)
+
+        UpperHull = ExtrapolateHull(UpperPoints, LeftMostPoint, RightMostPoint)
+        LowerHull = ExtrapolateHull(LowerPoints, RightMostPoint, LeftMostPoint)
+
+        # print("upper hull: " + str(UpperHull))
+        # print("lower hull: " + str(LowerHull))
+
+        LowerHull[-1][1] = UpperHull[-1][0]
+        LowerHull[0][0] = UpperHull[0][1]
+
+        UpperHull.extend(LowerHull)
+
+        # for line in UpperHull:  # mirror the hull over the y axis
+        # line[0].x *= -1
+        # line[1].x *= -1
+
+        """i = 0
+        while i < len(UpperHull) - 1:
+            if UpperHull[i][0] == UpperHull[i + 1][1] and UpperHull[i][1] == UpperHull[i + 1][0]:
+                UpperHull.pop(i)  # inverse lines, remove one
+                UpperHull[i - 1][1] = UpperHull[i][0]  # combine the two lines
+
+            i += 1"""
+
+        # for line in LowerHull:
+        # print("[" + str(line[0]) + ", " + str(line[1]) + "],")
+
+        return UpperHull
+
+    def RayCastIntersectContains(self, polygon=[[]], point=Common.Position()):
+        """Returns whether or not a point is inside a polygon.
+
+        Args:
+            polygon (list, optional): List of lists of points defining each line in order. Defaults to [[]].
+            point (_type_, optional): Point to detect position. Defaults to Common.Position().
+
+        Returns:
+            Bool: Whether or not the point is inside the polygon.
+        """
+
+        intersectionCount = 0
+        for line in polygon:
+            if (line[0].y < point.y and line[1].y > point.y) or (
+                line[0].y > point.y and line[1].y < point.y
+            ):
+                # line exists on the same y plane as the point.
+                if line[0].x > point.x and line[1].x > point.x:
+                    # line is to the right of the point.
+                    intersectionCount += 1
+                    continue
+                else:
+                    m = (line[1].y - line[0].y) / (line[1].x - line[0].x)
+                    b = line[0].y - m * line[0].x
+
+                    if m > 0:  # line is increasing
+                        if point.y > m * point.x + b:  # horizontal ray intersects line
+                            intersectionCount += 1
+                            continue
+                    else:  # line is decreasing
+                        if point.y < m * point.x + b:  # horizontal ray intersects line
+                            intersectionCount += 1
+                            continue
+
+        return (
+            intersectionCount % 2 == 1
+        )  # odd number of intersections means the point is inside the polygon

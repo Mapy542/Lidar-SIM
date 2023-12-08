@@ -483,7 +483,9 @@ def ProcessThread(Processor, ProcessorInfoQueue, ProcessorReturnQueue):
             continue
         Processor.RobotLidarData = ProcessorInfoQueue.get()
         # add any more functions that need to be run here
+        print("Processing")
         Processor.AcceptableProcess()
+        print("Acceptable Processed")
         ProcessorReturnQueue.put((Processor.AcceptableData, Processor.IllegalData, Processor.POI))
 
         ProcessorInfoQueue.task_done()  # tell the coordinator thread that it is done
